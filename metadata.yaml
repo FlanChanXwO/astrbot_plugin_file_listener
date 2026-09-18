@@ -1,0 +1,7 @@
+name: astrbot_plugin_file_listener
+display_name: 文件监听器
+desc: 监听 AstrBot 收到的文件事件并提供统一处理能力。
+version: v0.1.0
+author: FlanChanXwO
+repo: https://github.com/FlanChanXwO/astrbot_plugin_file_listener
+astrbot_version: ">=4.26.0"
