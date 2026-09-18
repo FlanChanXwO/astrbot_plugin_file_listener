@@ -14,6 +14,8 @@
 ## 开发规则
 
 - 优先复用 AstrBot 原生 API，不引入不必要依赖。
+- AstrBot 能力必须优先从 `astrbot.api` 及其子模块导入；只有确认 `astrbot.api` 未提供所需能力时，才允许使用 `astrbot.core` 等内部模块，并在对应代码附近说明为什么无法使用公开 API。
+- 新增或修改 AstrBot import 时，必须先核对公开 API 是否已经提供等价接口，禁止仅因内部路径更直接而依赖内部实现。
 - 日志统一使用 `astrbot.api.logger`，禁止直接使用 Python `logging`。
 - 运行态数据必须写入 AstrBot 分配的数据目录，不写入插件源码目录。
 - 保持 KISS/YAGNI；当前仅实现已确认的 `echo` 测试命令。
