@@ -187,8 +187,7 @@ listener = plugin.get_file_listener()
 async def callback(
     batch: FileEventBatch,
     options: ListenerOptions,
-) -> None:
-    ...
+) -> None: ...
 ```
 
 规则：
