@@ -413,6 +413,104 @@ async def test_onebot_merged_forward_returns_one_batch_and_honors_depth() -> Non
 
 
 @pytest.mark.asyncio
+async def test_onebot_merged_forward_recurses_through_napcat_node_messages() -> None:
+    """NapCat 会把内层合并转发展开为 node.data.message，而不是新的 forward id。"""
+    api = FakeActionApi(
+        {
+            (
+                "get_forward_msg",
+                "fwd-root",
+            ): {
+                "messages": [
+                    {
+                        "message": [
+                            {
+                                "type": "file",
+                                "data": {
+                                    "file_id": "level-1",
+                                    "file_name": "level-1.zip",
+                                    "file_size": 100,
+                                    "url": "https://qq/file/level-1.zip",
+                                },
+                            },
+                            {
+                                "type": "node",
+                                "data": {
+                                    "message": [
+                                        {
+                                            "type": "node",
+                                            "data": {
+                                                "message": [
+                                                    {
+                                                        "type": "file",
+                                                        "data": {
+                                                            "file_id": "level-2",
+                                                            "file_name": "level-2.zip",
+                                                            "file_size": 200,
+                                                            "url": "https://qq/file/level-2.zip",
+                                                        },
+                                                    },
+                                                    {
+                                                        "type": "node",
+                                                        "data": {
+                                                            "message": [
+                                                                {
+                                                                    "type": "node",
+                                                                    "data": {
+                                                                        "message": [
+                                                                            {
+                                                                                "type": "file",
+                                                                                "data": {
+                                                                                    "file_id": "level-3",
+                                                                                    "file_name": "level-3.zip",
+                                                                                    "file_size": 300,
+                                                                                    "url": "https://qq/file/level-3.zip",
+                                                                                },
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                }
+                                                            ]
+                                                        },
+                                                    },
+                                                ]
+                                            },
+                                        },
+                                    ]
+                                },
+                            },
+                        ]
+                    }
+                ]
+            }
+        }
+    )
+    event = FakeEvent(
+        platform="aiocqhttp",
+        messages=[Forward(id="fwd-root")],
+        raw_message={"post_type": "message", "message_id": 100},
+        bot=FakeBot(api),
+    )
+    adapter = OneBotFileAdapter()
+
+    for max_depth, expected in [
+        (1, ["level-1.zip"]),
+        (2, ["level-1.zip", "level-2.zip"]),
+        (3, ["level-1.zip", "level-2.zip", "level-3.zip"]),
+    ]:
+        api.calls.clear()
+        batch = await adapter.extract(
+            event,
+            "merged_forward",
+            ListenerOptions(forward_max_depth=max_depth),
+        )
+
+        assert batch is not None
+        assert [file.file_name for file in batch.files] == expected
+        assert [call[0] for call in api.calls] == ["get_forward_msg"]
+
+
+@pytest.mark.asyncio
 async def test_onebot_mixed_file_and_forward_segments_keep_all_files() -> None:
     api = FakeActionApi(
         {
