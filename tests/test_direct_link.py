@@ -12,6 +12,7 @@ from astrbot_plugin_file_listener.core.formatting import format_file_size
 from astrbot_plugin_file_listener.core.link_validation import LinkValidationResult
 from astrbot_plugin_file_listener.core.listener import FileListener
 from astrbot_plugin_file_listener.core.models import (
+    CallbackBinding,
     FileEvent,
     FileEventBatch,
     FilterContext,
@@ -91,13 +92,13 @@ def test_file_size_formatter_uses_human_readable_units(size: int, expected: str)
     assert format_file_size(size) == expected
 
 
-def test_missing_size_removes_entire_size_line() -> None:
+def test_missing_size_renders_unknown_instead_of_removing_line() -> None:
     rendered = render_file_template(
         DEFAULT_DIRECT_LINK_TEMPLATE,
         make_file("a.zip", url="https://example.invalid/a.zip", size=None),
     )
 
-    assert rendered == "文件名：a.zip\n链接：https://example.invalid/a.zip"
+    assert rendered == "文件名：a.zip\n大小：未知\n链接：https://example.invalid/a.zip"
 
 
 def test_unknown_template_placeholder_is_rejected() -> None:
@@ -199,7 +200,7 @@ async def test_direct_link_binding_sends_once_and_terminal_callback_is_noop() ->
 
 
 @pytest.mark.asyncio
-async def test_direct_link_binding_filters_confirmed_invalid_file_urls_before_send() -> None:
+async def test_direct_link_binding_replaces_confirmed_invalid_file_url_before_send() -> None:
     event = FakeSendEvent()
     options = ListenerOptions(parallel=False)
 
@@ -214,7 +215,37 @@ async def test_direct_link_binding_filters_confirmed_invalid_file_urls_before_se
         make_batch(event, make_file("expired.pdf", url="https://example.invalid/file"))
     )
 
-    assert event.sent == []
+    assert event.sent == ["文件名：expired.pdf\n大小：100 B\n链接：已失效"]
+
+
+@pytest.mark.asyncio
+async def test_invalid_link_marker_only_affects_direct_link_binding_context() -> None:
+    event = FakeSendEvent()
+    options = ListenerOptions(parallel=False)
+    observed_urls: list[str | None] = []
+
+    async def probe(url: str) -> LinkValidationResult:
+        del url
+        return LinkValidationResult.INVALID
+
+    async def external_callback(batch: FileEventBatch, callback_options) -> None:
+        del callback_options
+        observed_urls.extend(file.file_url for file in batch.files)
+
+    listener = FileListener(options)
+    listener.register(
+        [
+            create_direct_link_binding(options, link_probe=probe),
+            CallbackBinding(callback=external_callback),
+        ]
+    )
+
+    await listener.dispatch(
+        make_batch(event, make_file("expired.pdf", url="https://example.invalid/file"))
+    )
+
+    assert event.sent == ["文件名：expired.pdf\n大小：100 B\n链接：已失效"]
+    assert observed_urls == ["https://example.invalid/file"]
 
 
 @pytest.mark.asyncio

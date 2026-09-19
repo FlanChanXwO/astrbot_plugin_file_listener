@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from enum import Enum
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -21,6 +22,7 @@ class LinkValidationResult(Enum):
 
 LinkProbe = Callable[[str], Awaitable[LinkValidationResult]]
 DEFAULT_LINK_VALIDATION_TIMEOUT_SECONDS = 5.0
+INVALID_FILE_LINK_TEXT = "已失效"
 
 
 def _classify_http_error(error: HTTPError) -> LinkValidationResult:
@@ -77,17 +79,17 @@ async def probe_file_link(
 
 
 class FileLinkValidationFilter:
-    """从当前 DirectLink 工作集剔除已确认失效的文件 URL。"""
+    """校验 DirectLink URL，并标记已确认失效的链接。"""
 
     def __init__(self, probe: LinkProbe | None = None):
         self._probe = probe or probe_file_link
 
     async def __call__(self, context: FilterContext) -> FilterContext:
-        kept = []
+        validated = []
         for file_event in context.current_files:
             url = file_event.file_url
             if not isinstance(url, str) or not url.startswith(("http://", "https://")):
-                kept.append(file_event)
+                validated.append(file_event)
                 continue
             try:
                 result = await self._probe(url)
@@ -97,15 +99,16 @@ class FileLinkValidationFilter:
                     file_event.file_name,
                     exc_info=True,
                 )
-                kept.append(file_event)
+                validated.append(file_event)
                 continue
             if result is LinkValidationResult.INVALID:
                 logger.info(
-                    "文件链接已失效，DirectLink 将跳过: file=%s",
+                    "文件链接已失效，DirectLink 将标记为已失效: file=%s",
                     file_event.file_name,
                 )
+                validated.append(replace(file_event, file_url=INVALID_FILE_LINK_TEXT))
                 continue
-            kept.append(file_event)
+            validated.append(file_event)
 
-        context.current_files[:] = kept
+        context.current_files[:] = validated
         return context
