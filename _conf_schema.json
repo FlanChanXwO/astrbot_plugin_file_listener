@@ -61,7 +61,7 @@
       "template": {
         "type": "string",
         "description": "文件直链模板",
-        "hint": "支持 {file_name}、{file_size}、{file_url}；{file_size} 会自动按 B/KB/MB/GB/TB/PB 格式化，大小不可用时会删除包含该变量的整行。",
+        "hint": "支持 {file_name}、{file_size}、{file_url}；{file_size} 会自动按 B/KB/MB/GB/TB/PB 格式化，大小不可用时显示“未知”；链接确认失效时 {file_url} 显示“已失效”。",
         "default": "文件名：{file_name}\n大小：{file_size}\n链接：{file_url}",
         "editor_mode": true,
         "editor_language": "plaintext"

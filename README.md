@@ -30,9 +30,9 @@ OneBot：
 链接：{file_url}
 ```
 
-`{file_size}` 会自动按 1024 进制格式化为 `B / KB / MB / GB / TB / PB`；原始 callback 数据中的 `FileEvent.file_size` 仍保持字节整数。当平台无法可靠提供文件大小时，会删除包含 `{file_size}` 的整行。无法获得 URL 的文件仍然会进入 callback，只是不会参与 DirectLink 回复。
+`{file_size}` 会自动按 1024 进制格式化为 `B / KB / MB / GB / TB / PB`；原始 callback 数据中的 `FileEvent.file_size` 仍保持字节整数。当平台无法可靠提供文件大小时，`{file_size}` 显示为 `未知`。无法获得 URL 的文件仍然会进入 callback，只是不会参与 DirectLink 回复。
 
-DirectLink 链接校验使用 `GET` + `Range: bytes=0-0`，只探测首字节，不完整下载文件。明确返回 `404` 等客户端错误的链接会从 DirectLink 自己的 `current_files` 中移除；timeout、DNS/TLS/连接失败、`5xx`、`429` 等无法可靠判断的情况采用 **fail-open**，保留链接并继续发送。该过滤只影响 DirectLink 自己的 FilterContext，不会删除第三方 callback 收到的原始 `FileEvent`。
+DirectLink 链接校验使用 `GET` + `Range: bytes=0-0`，只探测首字节，不完整下载文件。明确返回 `404` 等客户端错误的链接不会删除整条文件记录，而是让 DirectLink 模板中的 `{file_url}` 显示为 `已失效`；timeout、DNS/TLS/连接失败、`5xx`、`429` 等无法可靠判断的情况采用 **fail-open**，保留原链接并继续发送。该过滤只影响 DirectLink 自己的 FilterContext，不会修改第三方 callback 收到的原始 `FileEvent`。
 
 多文件回复模式：
 

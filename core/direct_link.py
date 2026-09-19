@@ -6,7 +6,11 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain
 
 from .formatting import format_file_size
-from .link_validation import FileLinkValidationFilter, LinkProbe
+from .link_validation import (
+    INVALID_FILE_LINK_TEXT,
+    FileLinkValidationFilter,
+    LinkProbe,
+)
 from .listener import FilterChain
 from .logger import logger
 from .models import (
@@ -62,13 +66,10 @@ def render_file_template(template: str, file_event: FileEvent) -> str:
         渲染后的消息文本。
     """
     validate_direct_link_template(template)
-    formatted_size = format_file_size(file_event.file_size)
-    lines = template.splitlines()
-    if formatted_size is None:
-        lines = [line for line in lines if "{file_size}" not in line]
-    return "\n".join(lines).format(
+    formatted_size = format_file_size(file_event.file_size) or "未知"
+    return template.format(
         file_name=file_event.file_name,
-        file_size=formatted_size or "",
+        file_size=formatted_size,
         file_url=file_event.file_url or "",
     )
 
@@ -88,7 +89,10 @@ class SendDirectLinkFilter:
             render_file_template(self._options.direct_link_template, file_event)
             for file_event in context.current_files
             if isinstance(file_event.file_url, str)
-            and file_event.file_url.startswith(("http://", "https://"))
+            and (
+                file_event.file_url.startswith(("http://", "https://"))
+                or file_event.file_url == INVALID_FILE_LINK_TEXT
+            )
         ]
         if not rendered:
             logger.debug("文件事件没有可直接发送的 URL，跳过 DirectLink")
