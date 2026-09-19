@@ -1,12 +1,13 @@
 from .adapters import OneBotFileAdapter, TelegramFileAdapter
+from .config import DEFAULT_DEDUPE_WINDOW_SECONDS, build_listener_options
 from .dedupe import Deduplicator
 from .direct_link import (
     DEFAULT_DIRECT_LINK_TEMPLATE,
     SendDirectLinkFilter,
     create_direct_link_binding,
 )
-from .logger import logger
 from .listener import FileListener, FilterChain, RegistrationHandle
+from .logger import logger
 from .models import (
     CallbackBinding,
     FileEvent,
@@ -15,10 +16,10 @@ from .models import (
     FilterSpec,
     ListenerOptions,
 )
-from .utils import PathUtils
 
 __all__ = [
     "CallbackBinding",
+    "DEFAULT_DEDUPE_WINDOW_SECONDS",
     "Deduplicator",
     "DEFAULT_DIRECT_LINK_TEMPLATE",
     "FileEvent",
@@ -29,10 +30,10 @@ __all__ = [
     "FilterSpec",
     "ListenerOptions",
     "OneBotFileAdapter",
-    "PathUtils",
     "RegistrationHandle",
     "SendDirectLinkFilter",
     "TelegramFileAdapter",
+    "build_listener_options",
     "create_direct_link_binding",
     "logger",
 ]

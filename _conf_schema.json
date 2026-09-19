@@ -1,0 +1,82 @@
+{
+  "runtime": {
+    "type": "object",
+    "description": "运行行为",
+    "items": {
+      "parallel": {
+        "type": "bool",
+        "description": "并行执行回调",
+        "hint": "开启后不同 CallbackBinding 的完整 FilterChain → callback 流水线会并行执行。",
+        "default": true
+      },
+      "forward_max_depth": {
+        "type": "int",
+        "description": "合并转发最大递归深度",
+        "hint": "1 表示只解析第一层合并转发；达到上限后保留已提取文件并停止继续深入。",
+        "default": 3
+      }
+    }
+  },
+  "monitor_sources": {
+    "type": "object",
+    "description": "监听来源",
+    "items": {
+      "telegram": {
+        "type": "list",
+        "description": "Telegram 监听来源",
+        "default": ["message", "forwarded"],
+        "options": ["message", "forwarded"]
+      },
+      "onebot": {
+        "type": "list",
+        "description": "OneBot 监听来源",
+        "default": ["message", "private_file", "group_upload_notice", "merged_forward"],
+        "options": ["message", "private_file", "group_upload_notice", "merged_forward"]
+      }
+    }
+  },
+  "direct_link": {
+    "type": "object",
+    "description": "直链回复",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "自动发送文件直链",
+        "default": true
+      },
+      "reply_mode": {
+        "type": "string",
+        "description": "回复模式",
+        "hint": "smart=单文件单条、多文件聚合；aggregate=同一事件强制聚合；separate=每个文件单独发送。",
+        "default": "smart",
+        "options": ["smart", "aggregate", "separate"],
+        "labels": ["智能", "聚合", "逐文件"]
+      },
+      "template": {
+        "type": "string",
+        "description": "文件直链模板",
+        "hint": "支持 {file_name}、{file_size}、{file_url}；文件大小不可用时会删除包含 {file_size} 的整行。",
+        "default": "文件名：{file_name}\n大小：{file_size}\n链接：{file_url}",
+        "editor_mode": true,
+        "editor_language": "plaintext"
+      }
+    }
+  },
+  "dedupe": {
+    "type": "object",
+    "description": "短时去重",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "启用短时事件去重",
+        "default": true
+      },
+      "window_seconds": {
+        "type": "float",
+        "description": "去重窗口（秒）",
+        "hint": "用于抑制同一次 OneBot 文件上传同时出现 message 与 group_upload_notice 的重复触发。",
+        "default": 3.0
+      }
+    }
+  }
+}

@@ -4,4 +4,7 @@ desc: 监听 AstrBot 收到的文件事件并提供统一处理能力。
 version: v0.1.0
 author: FlanChanXwO
 repo: https://github.com/FlanChanXwO/astrbot_plugin_file_listener
-astrbot_version: ">=4.26.0"
+astrbot_version: ">4.26.0"
+support_platforms:
+  - telegram
+  - aiocqhttp
