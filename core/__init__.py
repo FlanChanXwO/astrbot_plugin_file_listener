@@ -7,6 +7,12 @@ from .direct_link import (
     create_direct_link_binding,
 )
 from .formatting import format_file_size
+from .link_validation import (
+    DEFAULT_LINK_VALIDATION_TIMEOUT_SECONDS,
+    FileLinkValidationFilter,
+    LinkValidationResult,
+    probe_file_link,
+)
 from .listener import FileListener, FilterChain, RegistrationHandle
 from .logger import logger
 from .models import (
@@ -23,13 +29,16 @@ __all__ = [
     "DEFAULT_DEDUPE_WINDOW_SECONDS",
     "Deduplicator",
     "DEFAULT_DIRECT_LINK_TEMPLATE",
+    "DEFAULT_LINK_VALIDATION_TIMEOUT_SECONDS",
     "FileEvent",
     "FileEventBatch",
+    "FileLinkValidationFilter",
     "FileListener",
     "FilterChain",
     "FilterContext",
     "FilterSpec",
     "ListenerOptions",
+    "LinkValidationResult",
     "OneBotFileAdapter",
     "RegistrationHandle",
     "SendDirectLinkFilter",
@@ -38,4 +47,5 @@ __all__ = [
     "create_direct_link_binding",
     "format_file_size",
     "logger",
+    "probe_file_link",
 ]

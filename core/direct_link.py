@@ -6,6 +6,7 @@ from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain
 
 from .formatting import format_file_size
+from .link_validation import FileLinkValidationFilter, LinkProbe
 from .listener import FilterChain
 from .logger import logger
 from .models import (
@@ -73,7 +74,7 @@ def render_file_template(template: str, file_event: FileEvent) -> str:
 
 
 class SendDirectLinkFilter:
-    """DirectLink binding 固定的第一个副作用过滤器。"""
+    """DirectLink binding 的系统发送过滤器。"""
 
     def __init__(self, options: ListenerOptions):
         self._options = options
@@ -115,17 +116,25 @@ class SendDirectLinkFilter:
 
 
 class _DirectLinkFilterChain(FilterChain):
-    """保证系统 DirectLink filter 永远先于普通 priority filters。"""
+    """系统校验 → DirectLink 发送 → 普通 priority filters。"""
 
     def __init__(
         self,
         options: ListenerOptions,
         filters: list[FilterSpec] | tuple[FilterSpec, ...] = (),
+        link_probe: LinkProbe | None = None,
     ):
         super().__init__(filters)
+        self._options = options
+        self._validation_filter = FileLinkValidationFilter(link_probe)
         self._system_filter = SendDirectLinkFilter(options)
 
     async def run(self, context: FilterContext) -> FilterContext:
+        if not self._options.send_direct_link:
+            return await super().run(context)
+        returned = await self._validation_filter(context)
+        if returned is not context:
+            raise RuntimeError("FileLinkValidationFilter 必须返回原 FilterContext")
         returned = await self._system_filter(context)
         if returned is not context:
             raise RuntimeError("SendDirectLinkFilter 必须返回原 FilterContext")
@@ -136,6 +145,7 @@ def create_direct_link_binding(
     options: ListenerOptions,
     *,
     filters: list[FilterSpec] | tuple[FilterSpec, ...] = (),
+    link_probe: LinkProbe | None = None,
 ) -> CallbackBinding:
     """创建插件内置 DirectLink CallbackBinding。"""
 
@@ -144,5 +154,5 @@ def create_direct_link_binding(
 
     return CallbackBinding(
         callback=terminal_callback,
-        filter_chain=_DirectLinkFilterChain(options, filters),
+        filter_chain=_DirectLinkFilterChain(options, filters, link_probe),
     )

@@ -9,6 +9,7 @@ from astrbot_plugin_file_listener.core.direct_link import (
     validate_direct_link_template,
 )
 from astrbot_plugin_file_listener.core.formatting import format_file_size
+from astrbot_plugin_file_listener.core.link_validation import LinkValidationResult
 from astrbot_plugin_file_listener.core.listener import FileListener
 from astrbot_plugin_file_listener.core.models import (
     FileEvent,
@@ -195,6 +196,68 @@ async def test_direct_link_binding_sends_once_and_terminal_callback_is_noop() ->
     )
 
     assert len(event.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_direct_link_binding_filters_confirmed_invalid_file_urls_before_send() -> None:
+    event = FakeSendEvent()
+    options = ListenerOptions(parallel=False)
+
+    async def probe(url: str) -> LinkValidationResult:
+        del url
+        return LinkValidationResult.INVALID
+
+    listener = FileListener(options)
+    listener.register([create_direct_link_binding(options, link_probe=probe)])
+
+    await listener.dispatch(
+        make_batch(event, make_file("expired.pdf", url="https://example.invalid/file"))
+    )
+
+    assert event.sent == []
+
+
+@pytest.mark.asyncio
+async def test_direct_link_binding_fails_open_when_link_validator_cannot_check() -> None:
+    event = FakeSendEvent()
+    options = ListenerOptions(parallel=False)
+
+    async def probe(url: str) -> LinkValidationResult:
+        del url
+        raise TimeoutError("validator timed out")
+
+    listener = FileListener(options)
+    listener.register([create_direct_link_binding(options, link_probe=probe)])
+
+    await listener.dispatch(
+        make_batch(event, make_file("slow.pdf", url="https://example.invalid/file"))
+    )
+
+    assert len(event.sent) == 1
+    assert "slow.pdf" in event.sent[0]
+
+
+@pytest.mark.asyncio
+async def test_direct_link_binding_does_not_probe_when_direct_link_is_disabled() -> None:
+    event = FakeSendEvent()
+    options = ListenerOptions(parallel=False, send_direct_link=False)
+    probe_calls = 0
+
+    async def probe(url: str) -> LinkValidationResult:
+        nonlocal probe_calls
+        del url
+        probe_calls += 1
+        return LinkValidationResult.VALID
+
+    listener = FileListener(options)
+    listener.register([create_direct_link_binding(options, link_probe=probe)])
+
+    await listener.dispatch(
+        make_batch(event, make_file("disabled.pdf", url="https://example.invalid/file"))
+    )
+
+    assert probe_calls == 0
+    assert event.sent == []
 
 
 @pytest.mark.asyncio
