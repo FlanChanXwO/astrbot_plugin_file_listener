@@ -30,7 +30,7 @@ OneBot：
 链接：{file_url}
 ```
 
-当平台无法可靠提供文件大小时，会删除包含 `{file_size}` 的整行。无法获得 URL 的文件仍然会进入 callback，只是不会参与 DirectLink 回复。
+`{file_size}` 会自动按 1024 进制格式化为 `B / KB / MB / GB / TB / PB`；原始 callback 数据中的 `FileEvent.file_size` 仍保持字节整数。当平台无法可靠提供文件大小时，会删除包含 `{file_size}` 的整行。无法获得 URL 的文件仍然会进入 callback，只是不会参与 DirectLink 回复。
 
 多文件回复模式：
 

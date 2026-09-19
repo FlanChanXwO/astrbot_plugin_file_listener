@@ -6,6 +6,7 @@ from .direct_link import (
     SendDirectLinkFilter,
     create_direct_link_binding,
 )
+from .formatting import format_file_size
 from .listener import FileListener, FilterChain, RegistrationHandle
 from .logger import logger
 from .models import (
@@ -35,5 +36,6 @@ __all__ = [
     "TelegramFileAdapter",
     "build_listener_options",
     "create_direct_link_binding",
+    "format_file_size",
     "logger",
 ]

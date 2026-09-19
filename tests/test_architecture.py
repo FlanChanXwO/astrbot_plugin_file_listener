@@ -34,3 +34,53 @@ def test_python_sources_only_use_public_astrbot_api() -> None:
                     )
 
     assert violations == []
+
+
+def test_file_event_handler_does_not_subscribe_to_all_message_types() -> None:
+    plugin_root = Path(__file__).resolve().parents[1]
+    tree = ast.parse((plugin_root / "main.py").read_text(encoding="utf-8"))
+    handler = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "FileListenerPlugin"
+        for node in node.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "on_file_event"
+    )
+    decorator = next(
+        item
+        for item in handler.decorator_list
+        if isinstance(item, ast.Call)
+        and isinstance(item.func, ast.Attribute)
+        and item.func.attr == "event_message_type"
+    )
+    expression = ast.unparse(decorator.args[0])
+
+    assert expression == (
+        "filter.EventMessageType.GROUP_MESSAGE | "
+        "filter.EventMessageType.PRIVATE_MESSAGE"
+    )
+
+
+def test_file_event_handler_only_subscribes_to_supported_platforms() -> None:
+    plugin_root = Path(__file__).resolve().parents[1]
+    tree = ast.parse((plugin_root / "main.py").read_text(encoding="utf-8"))
+    handler = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "FileListenerPlugin"
+        for node in node.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "on_file_event"
+    )
+    decorator = next(
+        item
+        for item in handler.decorator_list
+        if isinstance(item, ast.Call)
+        and isinstance(item.func, ast.Attribute)
+        and item.func.attr == "platform_adapter_type"
+    )
+    expression = ast.unparse(decorator.args[0])
+
+    assert expression == (
+        "filter.PlatformAdapterType.AIOCQHTTP | "
+        "filter.PlatformAdapterType.TELEGRAM"
+    )

@@ -60,7 +60,12 @@ class FileListenerPlugin(Star):
             raise RuntimeError("File Listener 尚未初始化或已经卸载")
         return self._listener
 
-    @filter.event_message_type(filter.EventMessageType.ALL)
+    @filter.platform_adapter_type(
+        filter.PlatformAdapterType.AIOCQHTTP | filter.PlatformAdapterType.TELEGRAM
+    )
+    @filter.event_message_type(
+        filter.EventMessageType.GROUP_MESSAGE | filter.EventMessageType.PRIVATE_MESSAGE
+    )
     async def on_file_event(self, event: AstrMessageEvent) -> None:
         """规范化、去重并分发 AstrBot 文件事件。"""
         listener = self._listener

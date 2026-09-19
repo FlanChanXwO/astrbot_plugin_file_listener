@@ -8,6 +8,7 @@ from astrbot_plugin_file_listener.core.direct_link import (
     render_file_template,
     validate_direct_link_template,
 )
+from astrbot_plugin_file_listener.core.formatting import format_file_size
 from astrbot_plugin_file_listener.core.listener import FileListener
 from astrbot_plugin_file_listener.core.models import (
     FileEvent,
@@ -71,7 +72,22 @@ def test_default_template_renders_name_size_and_url() -> None:
         make_file("a.zip", url="https://example.invalid/a.zip", size=321),
     )
 
-    assert rendered == "文件名：a.zip\n大小：321\n链接：https://example.invalid/a.zip"
+    assert rendered == "文件名：a.zip\n大小：321 B\n链接：https://example.invalid/a.zip"
+
+
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [
+        (0, "0 B"),
+        (512, "512 B"),
+        (1024, "1 KB"),
+        (1536, "1.5 KB"),
+        (1024**2, "1 MB"),
+        (int(2.5 * 1024**3), "2.5 GB"),
+    ],
+)
+def test_file_size_formatter_uses_human_readable_units(size: int, expected: str) -> None:
+    assert format_file_size(size) == expected
 
 
 def test_missing_size_removes_entire_size_line() -> None:
@@ -116,7 +132,7 @@ async def test_send_filter_returns_same_context_and_skips_missing_urls() -> None
 
     assert returned is context
     assert event.sent == [
-        "文件名：b.zip\n大小：100\n链接：https://example.invalid/b.zip"
+        "文件名：b.zip\n大小：100 B\n链接：https://example.invalid/b.zip"
     ]
 
 
