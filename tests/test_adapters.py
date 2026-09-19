@@ -266,6 +266,43 @@ async def test_onebot_group_upload_notice_can_fill_url_via_action() -> None:
     assert batch.files[0].file_size == 456
     assert batch.files[0].file_url == "https://qq/file/a.zip"
     assert api.calls[0][0] == "get_group_file_url"
+
+
+@pytest.mark.asyncio
+async def test_onebot_fills_blank_fname_query_with_url_encoded_file_name() -> None:
+    api = FakeActionApi(
+        {
+            ("get_group_file_url", "ob-file-1"): {
+                "data": {"url": "https://example.invalid/ftn_handler/abc/?fname="}
+            }
+        }
+    )
+    event = FakeEvent(
+        platform="aiocqhttp",
+        raw_message={
+            "post_type": "notice",
+            "notice_type": "group_upload",
+            "group_id": 10001,
+            "user_id": 20001,
+            "file": {
+                "id": "ob-file-1",
+                "name": "测试 文件.zip",
+                "size": 456,
+            },
+        },
+        bot=FakeBot(api),
+    )
+    adapter = OneBotFileAdapter()
+
+    batch = await adapter.extract(
+        event, adapter.classify(event), ListenerOptions()
+    )
+
+    assert batch is not None
+    assert (
+        batch.files[0].file_url
+        == "https://example.invalid/ftn_handler/abc/?fname=%E6%B5%8B%E8%AF%95%20%E6%96%87%E4%BB%B6.zip"
+    )
     assert api.calls[0][1]["group_id"] == 10001
     assert api.calls[0][1]["self_id"] == 30001
 

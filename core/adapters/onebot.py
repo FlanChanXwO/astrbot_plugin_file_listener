@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import inspect
+import re
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import quote
 
 from astrbot.api.message_components import File, Forward
 
@@ -19,6 +21,18 @@ class OneBotFileAdapter:
             if key in mapping:
                 return mapping[key]
         return None
+
+    @staticmethod
+    def _fill_blank_fname(file_url: str | None, file_name: str) -> str | None:
+        if not file_url:
+            return None
+        encoded_name = quote(file_name, safe="")
+        return re.sub(
+            r"([?&]fname=)(?=&|#|$)",
+            lambda match: match.group(1) + encoded_name,
+            file_url,
+            count=1,
+        )
 
     def classify(self, event: Any) -> str | None:
         """在执行 OneBot action 前完成廉价来源分类。"""
@@ -268,13 +282,14 @@ class OneBotFileAdapter:
         file_size: object,
         raw_file: object,
     ) -> FileEvent:
+        parsed_name = str(file_name)
         try:
             parsed_size = int(file_size) if file_size is not None else None
         except (TypeError, ValueError):
             parsed_size = None
         return FileEvent(
-            file_name=str(file_name),
-            file_url=file_url,
+            file_name=parsed_name,
+            file_url=self._fill_blank_fname(file_url, parsed_name),
             file_id=str(file_id) if file_id not in {None, ""} else None,
             file_size=parsed_size,
             platform="aiocqhttp",

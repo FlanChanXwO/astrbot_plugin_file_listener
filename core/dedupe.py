@@ -49,21 +49,30 @@ class Deduplicator:
                 return True
             self._event_ids[event_key] = now
 
-        fingerprint = self._batch_fingerprint(batch, platform_instance)
-        if fingerprint is None:
+        fingerprints = self._batch_fingerprints(batch, platform_instance)
+        if not fingerprints:
             return False
 
-        family, identities, weak_identity = fingerprint
-        key = (family, identities)
-        previous = self._fingerprints.get(key)
-        self._fingerprints[key] = (now, batch.source_type, weak_identity)
-        if previous is None:
-            return False
+        duplicate = False
+        for family, identities, weak_identity in fingerprints:
+            previous = self._fingerprints.get((family, identities))
+            if previous is None:
+                continue
+            _, previous_source, previous_weak = previous
+            if (
+                weak_identity or previous_weak
+            ) and previous_source == batch.source_type:
+                continue
+            duplicate = True
+            break
 
-        _, previous_source, previous_weak = previous
-        if (weak_identity or previous_weak) and previous_source == batch.source_type:
-            return False
-        return True
+        for family, identities, weak_identity in fingerprints:
+            self._fingerprints[(family, identities)] = (
+                now,
+                batch.source_type,
+                weak_identity,
+            )
+        return duplicate
 
     def clear(self) -> None:
         """清空当前插件生命周期内的去重状态。"""
@@ -81,50 +90,49 @@ class Deduplicator:
             key: value for key, value in self._fingerprints.items() if value[0] > cutoff
         }
 
-    def _batch_fingerprint(
+    def _batch_fingerprints(
         self, batch: FileEventBatch, platform_instance: str
-    ) -> tuple[str, tuple[tuple[str, ...], ...], bool] | None:
-        identities: list[tuple[str, ...]] = []
-        weak_identity = False
-        for file_event in batch.files:
-            identity = self._file_identity(file_event, platform_instance)
-            if identity is None:
-                return None
-            value, is_weak = identity
-            identities.append(value)
-            weak_identity = weak_identity or is_weak
-
-        return (
-            self._dedupe_family(batch),
-            tuple(sorted(identities)),
-            weak_identity,
-        )
+    ) -> list[tuple[str, tuple[tuple[str, ...], ...], bool]]:
+        family = self._dedupe_family(batch)
+        fingerprints: list[tuple[str, tuple[tuple[str, ...], ...], bool]] = []
+        for kind, weak in (("id", False), ("url", False), ("name-size", True)):
+            identities: list[tuple[str, ...]] = []
+            for file_event in batch.files:
+                identity = self._file_identity(
+                    file_event,
+                    platform_instance,
+                    kind=kind,
+                )
+                if identity is None:
+                    break
+                identities.append(identity)
+            else:
+                fingerprints.append((family, tuple(sorted(identities)), weak))
+        return fingerprints
 
     @staticmethod
     def _file_identity(
-        file_event: FileEvent, platform_instance: str
-    ) -> tuple[tuple[str, ...], bool] | None:
+        file_event: FileEvent,
+        platform_instance: str,
+        *,
+        kind: str,
+    ) -> tuple[str, ...] | None:
         chat_id = file_event.chat_id or ""
-        if file_event.file_id:
+        if kind == "id" and file_event.file_id:
+            return (platform_instance, chat_id, "id", file_event.file_id)
+        if kind == "url" and file_event.file_url:
+            return (platform_instance, chat_id, "url", file_event.file_url)
+        if (
+            kind == "name-size"
+            and file_event.file_name
+            and file_event.file_size is not None
+        ):
             return (
-                (platform_instance, chat_id, "id", file_event.file_id),
-                False,
-            )
-        if file_event.file_url:
-            return (
-                (platform_instance, chat_id, "url", file_event.file_url),
-                False,
-            )
-        if file_event.file_name and file_event.file_size is not None:
-            return (
-                (
-                    platform_instance,
-                    chat_id,
-                    "name-size",
-                    file_event.file_name,
-                    str(file_event.file_size),
-                ),
-                True,
+                platform_instance,
+                chat_id,
+                "name-size",
+                file_event.file_name,
+                str(file_event.file_size),
             )
         return None
 
