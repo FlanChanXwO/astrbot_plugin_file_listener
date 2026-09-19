@@ -20,7 +20,7 @@ OneBot：
 
 ## 默认行为
 
-插件默认开启 DirectLink：检测到文件后立即在当前会话发送平台提供的原始下载 URL。
+插件默认开启 DirectLink：检测到文件后先通过内置 `FileLinkValidationFilter` 校验链接，再在当前会话发送平台提供的原始下载 URL。
 
 默认模板：
 
@@ -31,6 +31,8 @@ OneBot：
 ```
 
 `{file_size}` 会自动按 1024 进制格式化为 `B / KB / MB / GB / TB / PB`；原始 callback 数据中的 `FileEvent.file_size` 仍保持字节整数。当平台无法可靠提供文件大小时，会删除包含 `{file_size}` 的整行。无法获得 URL 的文件仍然会进入 callback，只是不会参与 DirectLink 回复。
+
+DirectLink 链接校验使用 `GET` + `Range: bytes=0-0`，只探测首字节，不完整下载文件。明确返回 `404` 等客户端错误的链接会从 DirectLink 自己的 `current_files` 中移除；timeout、DNS/TLS/连接失败、`5xx`、`429` 等无法可靠判断的情况采用 **fail-open**，保留链接并继续发送。该过滤只影响 DirectLink 自己的 FilterContext，不会删除第三方 callback 收到的原始 `FileEvent`。
 
 多文件回复模式：
 
@@ -115,6 +117,16 @@ async def file_filter(context):
 每一层必须返回传入的**同一个** `FilterContext` 实例。filter 可以修改自己的 `current_files`、`continue_chain` 和 `reason`，但不应对 `raw_event` 留下不可逆修改。
 
 不同 CallbackBinding 使用独立 FilterContext。某个 filter 或 callback 抛异常只终止自己的 binding，不影响其它 binding。
+
+内置 DirectLink 的系统链顺序为：
+
+```text
+FileLinkValidationFilter
+→ SendDirectLinkFilter
+→ 普通 priority filters
+```
+
+`FileLinkValidationFilter` 也从 `core` 公共 API 导出，可被第三方 binding 直接复用。
 
 ## Telegram 原始 URL 风险
 
