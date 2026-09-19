@@ -9,6 +9,12 @@
         "hint": "开启后不同 CallbackBinding 的完整 FilterChain → callback 流水线会并行执行。",
         "default": true
       },
+      "ignore_self_messages": {
+        "type": "bool",
+        "description": "忽略 Bot 自身消息",
+        "hint": "默认开启。关闭后会处理平台实际上报的 Bot 自身文件消息；OneBot/NapCat 还需要对应 WebSocket 客户端启用 reportSelfMessage。Telegram Bot API 主动发送的消息通常不会作为 update 回送给 Bot。",
+        "default": true
+      },
       "forward_max_depth": {
         "type": "int",
         "description": "合并转发最大递归深度",
@@ -55,7 +61,7 @@
       "template": {
         "type": "string",
         "description": "文件直链模板",
-        "hint": "支持 {file_name}、{file_size}、{file_url}；文件大小不可用时会删除包含 {file_size} 的整行。",
+        "hint": "支持 {file_name}、{file_size}、{file_url}；{file_size} 会自动按 B/KB/MB/GB/TB/PB 格式化，大小不可用时会删除包含该变量的整行。",
         "default": "文件名：{file_name}\n大小：{file_size}\n链接：{file_url}",
         "editor_mode": true,
         "editor_language": "plaintext"

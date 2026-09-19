@@ -62,6 +62,7 @@ def build_listener_options(config: Mapping[str, Any]) -> ListenerOptions:
     dedupe = _section(config, "dedupe")
 
     parallel = _bool_value(runtime, "parallel", True)
+    ignore_self_messages = _bool_value(runtime, "ignore_self_messages", True)
     raw_depth = runtime.get("forward_max_depth", 3)
     if isinstance(raw_depth, bool) or not isinstance(raw_depth, int) or raw_depth <= 0:
         logger.warning("forward_max_depth 必须为正整数，已回退为 3")
@@ -121,6 +122,7 @@ def build_listener_options(config: Mapping[str, Any]) -> ListenerOptions:
 
     return ListenerOptions(
         parallel=parallel,
+        ignore_self_messages=ignore_self_messages,
         send_direct_link=send_direct_link,
         file_reply_mode=reply_mode,
         forward_max_depth=forward_max_depth,

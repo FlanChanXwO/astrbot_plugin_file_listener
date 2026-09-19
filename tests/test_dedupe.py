@@ -72,6 +72,28 @@ def test_onebot_message_and_upload_notice_share_mirror_family() -> None:
     assert dedupe.is_duplicate(make_batch(source="group_upload_notice")) is True
 
 
+def test_onebot_mirror_events_dedupe_when_platform_file_ids_differ() -> None:
+    """NapCat 的 group_upload notice 与普通 file message 会使用不同 file_id。"""
+    clock = FakeClock()
+    dedupe = Deduplicator(enabled=True, window_seconds=2.0, clock=clock)
+
+    message = make_batch(
+        source="message",
+        file_id="raw-file-uuid",
+        file_name="TotalWarWarhammerIIITrainer.zip",
+        file_size=123456,
+    )
+    notice = make_batch(
+        source="group_upload_notice",
+        file_id="napcat-encoded-notice-id",
+        file_name="TotalWarWarhammerIIITrainer.zip",
+        file_size=123456,
+    )
+
+    assert dedupe.is_duplicate(message) is False
+    assert dedupe.is_duplicate(notice) is True
+
+
 def test_forward_is_not_deduped_against_normal_upload() -> None:
     clock = FakeClock()
     dedupe = Deduplicator(enabled=True, window_seconds=2.0, clock=clock)

@@ -86,6 +86,7 @@ class ListenerOptions:
     """File Listener 单次插件生命周期内的只读配置快照。"""
 
     parallel: bool = True
+    ignore_self_messages: bool = True
     send_direct_link: bool = True
     file_reply_mode: Literal["smart", "aggregate", "separate"] = "smart"
     forward_max_depth: int = 3

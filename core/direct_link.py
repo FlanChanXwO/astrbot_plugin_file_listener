@@ -5,6 +5,7 @@ from string import Formatter
 from astrbot.api.event import MessageChain
 from astrbot.api.message_components import Plain
 
+from .formatting import format_file_size
 from .listener import FilterChain
 from .logger import logger
 from .models import (
@@ -60,12 +61,13 @@ def render_file_template(template: str, file_event: FileEvent) -> str:
         渲染后的消息文本。
     """
     validate_direct_link_template(template)
+    formatted_size = format_file_size(file_event.file_size)
     lines = template.splitlines()
-    if file_event.file_size is None:
+    if formatted_size is None:
         lines = [line for line in lines if "{file_size}" not in line]
     return "\n".join(lines).format(
         file_name=file_event.file_name,
-        file_size=file_event.file_size if file_event.file_size is not None else "",
+        file_size=formatted_size or "",
         file_url=file_event.file_url or "",
     )
 
