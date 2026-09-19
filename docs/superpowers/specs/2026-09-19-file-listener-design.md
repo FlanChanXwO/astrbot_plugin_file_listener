@@ -254,6 +254,10 @@ DirectLinkBinding
    └─ 后续可选 filters
 ```
 
+`SendDirectLinkFilter` 是系统固定前置 filter，不参与普通 `priority` 排序；无论第三方或后续内置 filter 使用什么 priority，都不能插到它前面。
+
+发送副作用只发生在 `SendDirectLinkFilter`。DirectLink binding 的终端 callback 不再重复发送文件链接，只作为统一 Binding Pipeline 的终点存在，因此不会出现“filter 发一次、callback 再发一次”的重复行为。
+
 只要 `send_direct_link=true`，检测到文件后就立即执行发送行为。后续 filter 不能撤销已经发送的消息。
 
 `send_direct_link=false` 时不发送直链，但第三方 bindings 继续正常工作。
@@ -296,9 +300,9 @@ onebot
 └─ merged_forward
 ```
 
-普通群聊 / 私聊文件优先消费 AstrBot 已规范化的 `File` component。
+其中 `message` 表示普通群文件消息，`private_file` 表示普通私聊文件消息。两者都优先消费 AstrBot 已规范化的 `File` component，source classifier 必须保证二者互斥。
 
-`group_upload_notice` 当前 AstrBot aiocqhttp adapter 未统一转换为 File component，因此 OneBot adapter 需要在平台边界识别原始 notice，并提取 `file.id`、`file.name`、`file.size` 等字段。
+`group_upload_notice` 当前 AstrBot aiocqhttp adapter 未统一转换为 File component，因此 OneBot adapter 需要在平台边界识别原始 notice，并提取 `file.id`、`file.name`、`file.size` 等字段。若 notice 本身没有可直接发送的 URL，但具备可解析的 `file_id` / 群上下文，则 adapter 应尝试通过 OneBot 文件 URL 能力补齐 `file_url`；解析失败时仍保留 `FileEvent(file_url=None)`，不丢弃文件事件。
 
 ### 8.4 OneBot 合并转发
 
@@ -319,6 +323,8 @@ get_forward_msg
 ```
 
 已经提取出的文件不会因为更深层节点失败而丢失。
+
+合并转发节点中的文件如果只提供 `file_id` 而没有 URL，也应在 adapter 边界尽力使用当前会话可用的 OneBot 文件 URL 能力补齐；不为了补齐 URL 下载完整文件。
 
 无论合并转发中有多少文件，都只形成一个 `FileEventBatch`。
 
@@ -374,6 +380,8 @@ OneBot message ↔ group_upload_notice
 ```
 
 因此普通上传后再转发同一文件仍应触发新的文件事件。
+
+当 canonical identity 只能退化到 `file_name + file_size` 时，跨来源去重只用于已知 mirror source 之间的比较，不用这个弱身份去压制同一 source 内连续发生的两个事件，以降低同名同大小文件被误判为重复的风险。
 
 ### 10.4 两级判断
 
@@ -573,6 +581,8 @@ Binding C
 ```
 
 File Listener 配置重载等价于插件完整卸载再加载，因此不保留旧 callback 注册。第三方插件需要感知 File Listener 重载并重新获取当前实例、重新注册 callback。
+
+File Listener 首期不额外提供跨插件重载通知总线。也就是说，第三方插件如果需要在 File Listener 被单独重载后自动恢复监听，必须通过其自身可用的生命周期/重绑定机制重新查询当前实例；旧 `RegistrationHandle` 不会自动指向新实例。
 
 ## 14. 测试策略
 
