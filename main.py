@@ -73,7 +73,11 @@ class FileListenerPlugin(Star):
         if adapter is None:
             return
 
-        source = adapter.classify(event)
+        try:
+            source = adapter.classify(event)
+        except Exception:
+            logger.exception("文件事件来源分类失败: platform=%s", platform)
+            return
         if source is None:
             return
 
@@ -84,7 +88,15 @@ class FileListenerPlugin(Star):
         if source not in enabled_sources:
             return
 
-        batch = await adapter.extract(event, source, listener.options)
+        try:
+            batch = await adapter.extract(event, source, listener.options)
+        except Exception:
+            logger.exception(
+                "文件事件平台解析失败: platform=%s source=%s",
+                platform,
+                source,
+            )
+            return
         if batch is None:
             return
         if deduplicator.is_duplicate(batch):

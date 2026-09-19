@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from .listener import FilterChain
 
 DEFAULT_MONITOR_SOURCES: Mapping[str, frozenset[str]] = MappingProxyType(
     {
@@ -43,14 +46,27 @@ class FileEventBatch:
     platform_id: str | None = None
 
 
-@dataclass(slots=True)
 class FilterContext:
     """单个 callback binding 的过滤工作上下文。"""
 
-    original_batch: FileEventBatch
-    current_files: list[FileEvent]
-    continue_chain: bool = True
-    reason: str | None = None
+    __slots__ = ("_original_batch", "current_files", "continue_chain", "reason")
+
+    def __init__(
+        self,
+        original_batch: FileEventBatch,
+        current_files: list[FileEvent],
+        continue_chain: bool = True,
+        reason: str | None = None,
+    ) -> None:
+        self._original_batch = original_batch
+        self.current_files = current_files
+        self.continue_chain = continue_chain
+        self.reason = reason
+
+    @property
+    def original_batch(self) -> FileEventBatch:
+        """返回不可替换的源事件批次。"""
+        return self._original_batch
 
     @classmethod
     def from_batch(cls, batch: FileEventBatch) -> FilterContext:
@@ -100,4 +116,4 @@ class CallbackBinding:
     """一个异步 callback 与其最多一条过滤器链。"""
 
     callback: CallbackCallable
-    filter_chain: Any | None = None
+    filter_chain: FilterChain | None = None

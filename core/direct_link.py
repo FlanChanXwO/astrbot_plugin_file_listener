@@ -34,6 +34,7 @@ def validate_direct_link_template(template: str) -> None:
         fields = list(Formatter().parse(template))
     except ValueError as exc:
         raise ValueError(f"直链模板格式无效: {exc}") from exc
+    used_fields: set[str] = set()
     for _, field_name, format_spec, conversion in fields:
         if field_name is None:
             continue
@@ -41,6 +42,11 @@ def validate_direct_link_template(template: str) -> None:
             raise ValueError(f"未知模板变量: {field_name}")
         if format_spec or conversion:
             raise ValueError("直链模板不支持 format spec 或 conversion")
+        used_fields.add(field_name)
+
+    missing = {"file_name", "file_url"} - used_fields
+    if missing:
+        raise ValueError("直链模板必须包含: " + ", ".join(sorted(missing)))
 
 
 def render_file_template(template: str, file_event: FileEvent) -> str:
@@ -78,7 +84,8 @@ class SendDirectLinkFilter:
         rendered = [
             render_file_template(self._options.direct_link_template, file_event)
             for file_event in context.current_files
-            if file_event.file_url
+            if isinstance(file_event.file_url, str)
+            and file_event.file_url.startswith(("http://", "https://"))
         ]
         if not rendered:
             logger.debug("文件事件没有可直接发送的 URL，跳过 DirectLink")

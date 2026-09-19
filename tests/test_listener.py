@@ -89,6 +89,9 @@ def test_filter_context_keeps_original_batch_and_private_working_files() -> None
     assert context.original_batch.files == (file_event,)
     assert context.current_files == []
 
+    with pytest.raises(AttributeError):
+        context.original_batch = make_batch("replacement.zip")
+
 
 def test_listener_options_default_to_parallel_execution() -> None:
     assert ListenerOptions().parallel is True
@@ -310,6 +313,32 @@ def test_register_treats_repeated_bound_method_as_same_callback() -> None:
 
     with pytest.raises(ValueError, match="重复注册"):
         listener.register([CallbackBinding(callback=consumer.on_file)])
+
+
+@pytest.mark.asyncio
+async def test_register_accepts_reload_compatible_structural_binding() -> None:
+    class PreviousGenerationChain:
+        async def run(self, context: FilterContext) -> FilterContext:
+            context.current_files[:] = context.current_files[:1]
+            return context
+
+    class PreviousGenerationBinding:
+        def __init__(self, callback) -> None:
+            self.callback = callback
+            self.filter_chain = PreviousGenerationChain()
+
+    received: list[tuple[str, ...]] = []
+
+    async def callback(batch: FileEventBatch, options: ListenerOptions) -> None:
+        del options
+        received.append(tuple(file.file_name for file in batch.files))
+
+    listener = FileListener(ListenerOptions(parallel=False))
+    listener.register([PreviousGenerationBinding(callback)])
+
+    await listener.dispatch(make_batch("a.zip", "b.zip"))
+
+    assert received == [("a.zip",)]
 
 
 @pytest.mark.asyncio

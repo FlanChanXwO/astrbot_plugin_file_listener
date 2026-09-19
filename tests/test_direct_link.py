@@ -88,6 +88,19 @@ def test_unknown_template_placeholder_is_rejected() -> None:
         validate_direct_link_template("{file_name}\n{unknown}")
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "文件名：{file_name}",
+        "链接：{file_url}",
+        "大小：{file_size}",
+    ],
+)
+def test_template_requires_file_name_and_file_url(template: str) -> None:
+    with pytest.raises(ValueError, match="必须包含"):
+        validate_direct_link_template(template)
+
+
 @pytest.mark.asyncio
 async def test_send_filter_returns_same_context_and_skips_missing_urls() -> None:
     event = FakeSendEvent()
@@ -105,6 +118,16 @@ async def test_send_filter_returns_same_context_and_skips_missing_urls() -> None
     assert event.sent == [
         "文件名：b.zip\n大小：100\n链接：https://example.invalid/b.zip"
     ]
+
+
+@pytest.mark.asyncio
+async def test_send_filter_does_not_expose_local_paths() -> None:
+    event = FakeSendEvent()
+    batch = make_batch(event, make_file("a.zip", url="/srv/private/a.zip"))
+
+    await SendDirectLinkFilter(ListenerOptions())(FilterContext.from_batch(batch))
+
+    assert event.sent == []
 
 
 @pytest.mark.asyncio

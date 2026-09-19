@@ -56,6 +56,14 @@ def test_same_trusted_event_id_is_duplicate_within_window() -> None:
     assert dedupe.is_duplicate(make_batch(event_id="event-1")) is True
 
 
+def test_same_event_id_in_different_chats_is_not_duplicate() -> None:
+    clock = FakeClock()
+    dedupe = Deduplicator(enabled=True, window_seconds=2.0, clock=clock)
+
+    assert dedupe.is_duplicate(make_batch(event_id="42", chat_id="chat-a")) is False
+    assert dedupe.is_duplicate(make_batch(event_id="42", chat_id="chat-b")) is False
+
+
 def test_onebot_message_and_upload_notice_share_mirror_family() -> None:
     clock = FakeClock()
     dedupe = Deduplicator(enabled=True, window_seconds=2.0, clock=clock)

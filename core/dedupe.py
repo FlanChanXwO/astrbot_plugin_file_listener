@@ -21,7 +21,7 @@ class Deduplicator:
         self.enabled = enabled
         self.window_seconds = window_seconds
         self._clock = clock
-        self._event_ids: dict[tuple[str, str], float] = {}
+        self._event_ids: dict[tuple[str, str, str], float] = {}
         self._fingerprints: dict[
             tuple[str, tuple[tuple[str, ...], ...]], tuple[float, str, bool]
         ] = {}
@@ -43,7 +43,8 @@ class Deduplicator:
         platform_instance = batch.platform_id or batch.platform
 
         if batch.event_id:
-            event_key = (platform_instance, batch.event_id)
+            chat_id = batch.files[0].chat_id if batch.files else None
+            event_key = (platform_instance, chat_id or "", batch.event_id)
             if event_key in self._event_ids:
                 return True
             self._event_ids[event_key] = now
@@ -77,9 +78,7 @@ class Deduplicator:
             if timestamp > cutoff
         }
         self._fingerprints = {
-            key: value
-            for key, value in self._fingerprints.items()
-            if value[0] > cutoff
+            key: value for key, value in self._fingerprints.items() if value[0] > cutoff
         }
 
     def _batch_fingerprint(

@@ -240,6 +240,27 @@ async def test_plugin_source_gate_skips_disabled_source_before_extraction() -> N
 
 
 @pytest.mark.asyncio
+async def test_plugin_isolates_unexpected_adapter_errors() -> None:
+    class BrokenAdapter:
+        def classify(self, event) -> str:
+            del event
+            return "message"
+
+        async def extract(self, event, source, options):
+            del event, source, options
+            raise RuntimeError("broken adapter")
+
+    plugin = FileListenerPlugin(context=object(), config={})
+    await plugin.initialize()
+    plugin._adapters["telegram"] = BrokenAdapter()
+    event = FakeTelegramEvent()
+
+    await plugin.on_file_event(event)
+
+    assert event.sent == []
+
+
+@pytest.mark.asyncio
 async def test_plugin_terminate_invalidates_listener_registration() -> None:
     plugin = FileListenerPlugin(context=object(), config={})
     await plugin.initialize()

@@ -13,15 +13,23 @@ from ..models import FileEvent, FileEventBatch, ListenerOptions
 class OneBotFileAdapter:
     """把 AstrBot aiocqhttp/OneBot 文件事件规范化为 FileEventBatch。"""
 
+    @staticmethod
+    def _first_present(mapping: Mapping[str, Any], *keys: str) -> Any:
+        for key in keys:
+            if key in mapping:
+                return mapping[key]
+        return None
+
     def classify(self, event: Any) -> str | None:
         """在执行 OneBot action 前完成廉价来源分类。"""
         if event.get_platform_name() != "aiocqhttp":
             return None
 
         raw = getattr(event.message_obj, "raw_message", None)
-        if self._raw_get(raw, "post_type") == "notice" and self._raw_get(
-            raw, "notice_type"
-        ) == "group_upload":
+        if (
+            self._raw_get(raw, "post_type") == "notice"
+            and self._raw_get(raw, "notice_type") == "group_upload"
+        ):
             return "group_upload_notice"
 
         messages = event.get_messages()
@@ -85,13 +93,23 @@ class OneBotFileAdapter:
         files: list[FileEvent] = []
         for index, component in enumerate(components):
             raw_segment = raw_files[index] if index < len(raw_files) else None
-            data = raw_segment.get("data", {}) if isinstance(raw_segment, Mapping) else {}
+            data = (
+                raw_segment.get("data", {}) if isinstance(raw_segment, Mapping) else {}
+            )
             if not isinstance(data, Mapping):
                 data = {}
-            file_url = getattr(component, "url", None) or None
+            component_url = getattr(component, "url", None)
+            file_url = (
+                component_url
+                if isinstance(component_url, str)
+                and component_url.startswith(("http://", "https://"))
+                else None
+            )
             file_value = getattr(component, "file_", None)
-            if not file_url and isinstance(file_value, str) and file_value.startswith(
-                ("http://", "https://")
+            if (
+                not file_url
+                and isinstance(file_value, str)
+                and file_value.startswith(("http://", "https://"))
             ):
                 file_url = file_value
             if not file_url:
@@ -114,7 +132,7 @@ class OneBotFileAdapter:
                     ),
                     file_url=file_url,
                     file_id=data.get("file_id") or data.get("id"),
-                    file_size=data.get("file_size") or data.get("size"),
+                    file_size=self._first_present(data, "file_size", "size"),
                     raw_file=raw_segment or component,
                 )
             )
@@ -146,7 +164,7 @@ class OneBotFileAdapter:
                 ),
                 file_url=file_url,
                 file_id=file_id,
-                file_size=file_data.get("size") or file_data.get("file_size"),
+                file_size=self._first_present(file_data, "size", "file_size"),
                 raw_file=file_data,
             )
         ]
@@ -154,7 +172,7 @@ class OneBotFileAdapter:
     async def _extract_merged_forward(
         self, event: Any, max_depth: int
     ) -> list[FileEvent]:
-        files: list[FileEvent] = []
+        files = await self._extract_file_components(event, "merged_forward")
         for component in event.get_messages():
             if not isinstance(component, Forward):
                 continue
@@ -224,7 +242,7 @@ class OneBotFileAdapter:
                             ),
                             file_url=file_url,
                             file_id=file_id,
-                            file_size=data.get("file_size") or data.get("size"),
+                            file_size=self._first_present(data, "file_size", "size"),
                             raw_file=segment,
                         )
                     )
@@ -291,7 +309,12 @@ class OneBotFileAdapter:
         if not isinstance(result, Mapping):
             return None
         candidate = result.get("url")
-        return candidate if isinstance(candidate, str) and candidate else None
+        return (
+            candidate
+            if isinstance(candidate, str)
+            and candidate.startswith(("http://", "https://"))
+            else None
+        )
 
     async def _get_forward_msg(
         self, event: Any, forward_id: str
@@ -328,7 +351,13 @@ class OneBotFileAdapter:
         for params in params_list:
             routed = dict(params)
             if self_id:
-                routed.setdefault("self_id", self_id)
+                routed.setdefault(
+                    "self_id", int(self_id) if str(self_id).isdigit() else self_id
+                )
+            for numeric_key in ("group_id", "user_id"):
+                numeric_value = routed.get(numeric_key)
+                if isinstance(numeric_value, str) and numeric_value.isdigit():
+                    routed[numeric_key] = int(numeric_value)
             try:
                 result = call_action(action, **routed)
                 if inspect.isawaitable(result):

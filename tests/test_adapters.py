@@ -58,7 +58,7 @@ class FakeEvent:
         return self._sender_id
 
     def get_self_id(self) -> str:
-        return "bot-1"
+        return "30001"
 
 
 class FakeActionApi:
@@ -138,6 +138,27 @@ async def test_telegram_non_file_event_is_ignored() -> None:
 
 
 @pytest.mark.asyncio
+async def test_telegram_local_component_path_is_not_exposed_as_direct_url() -> None:
+    raw = SimpleNamespace(
+        message=SimpleNamespace(
+            document=SimpleNamespace(file_id="tg-file-1", file_size=10),
+            forward_origin=None,
+        )
+    )
+    event = FakeEvent(
+        platform="telegram",
+        messages=[File(name="a.zip", url="/srv/private/a.zip")],
+        raw_message=raw,
+    )
+    adapter = TelegramFileAdapter()
+
+    batch = await adapter.extract(event, adapter.classify(event), ListenerOptions())
+
+    assert batch is not None
+    assert batch.files[0].file_url is None
+
+
+@pytest.mark.asyncio
 async def test_onebot_group_and_private_file_sources_are_mutually_exclusive() -> None:
     raw = {
         "post_type": "message",
@@ -173,6 +194,50 @@ async def test_onebot_group_and_private_file_sources_are_mutually_exclusive() ->
 
 
 @pytest.mark.asyncio
+async def test_onebot_preserves_zero_byte_file_size() -> None:
+    raw = {
+        "post_type": "message",
+        "message_id": 124,
+        "message": [
+            {
+                "type": "file",
+                "data": {"file_id": "empty-file", "file_size": 0},
+            }
+        ],
+    }
+    event = FakeEvent(
+        platform="aiocqhttp",
+        messages=[File(name="empty.bin", url="https://qq/file/empty.bin")],
+        raw_message=raw,
+    )
+    adapter = OneBotFileAdapter()
+
+    batch = await adapter.extract(event, "message", ListenerOptions())
+
+    assert batch is not None
+    assert batch.files[0].file_size == 0
+
+
+@pytest.mark.asyncio
+async def test_onebot_local_component_path_is_not_exposed_as_direct_url() -> None:
+    event = FakeEvent(
+        platform="aiocqhttp",
+        messages=[File(name="a.zip", url="/srv/private/a.zip")],
+        raw_message={
+            "post_type": "message",
+            "message_id": 123,
+            "message": [{"type": "file", "data": {"file_id": "ob-file-1"}}],
+        },
+    )
+    adapter = OneBotFileAdapter()
+
+    batch = await adapter.extract(event, adapter.classify(event), ListenerOptions())
+
+    assert batch is not None
+    assert batch.files[0].file_url is None
+
+
+@pytest.mark.asyncio
 async def test_onebot_group_upload_notice_can_fill_url_via_action() -> None:
     api = FakeActionApi(
         {("get_group_file_url", "ob-file-1"): {"data": {"url": "https://qq/file/a.zip"}}}
@@ -201,6 +266,8 @@ async def test_onebot_group_upload_notice_can_fill_url_via_action() -> None:
     assert batch.files[0].file_size == 456
     assert batch.files[0].file_url == "https://qq/file/a.zip"
     assert api.calls[0][0] == "get_group_file_url"
+    assert api.calls[0][1]["group_id"] == 10001
+    assert api.calls[0][1]["self_id"] == 30001
 
 
 @pytest.mark.asyncio
@@ -306,6 +373,60 @@ async def test_onebot_merged_forward_returns_one_batch_and_honors_depth() -> Non
     assert shallow is not None
     assert [file.file_name for file in shallow.files] == ["a.zip"]
     assert [call[0] for call in api.calls] == ["get_forward_msg"]
+
+
+@pytest.mark.asyncio
+async def test_onebot_mixed_file_and_forward_segments_keep_all_files() -> None:
+    api = FakeActionApi(
+        {
+            (
+                "get_forward_msg",
+                "fwd-1",
+            ): {
+                "messages": [
+                    {
+                        "message": [
+                            {
+                                "type": "file",
+                                "data": {
+                                    "file_id": "nested-file",
+                                    "file_name": "nested.zip",
+                                    "url": "https://qq/file/nested.zip",
+                                },
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    )
+    event = FakeEvent(
+        platform="aiocqhttp",
+        messages=[
+            File(name="direct.zip", url="https://qq/file/direct.zip"),
+            Forward(id="fwd-1"),
+        ],
+        raw_message={
+            "post_type": "message",
+            "message_id": 99,
+            "message": [
+                {
+                    "type": "file",
+                    "data": {"file_id": "direct-file", "file_size": 10},
+                },
+                {"type": "forward", "data": {"id": "fwd-1"}},
+            ],
+        },
+        bot=FakeBot(api),
+    )
+    adapter = OneBotFileAdapter()
+
+    batch = await adapter.extract(
+        event, adapter.classify(event), ListenerOptions(forward_max_depth=2)
+    )
+
+    assert batch is not None
+    assert [file.file_name for file in batch.files] == ["direct.zip", "nested.zip"]
 
 
 @pytest.mark.asyncio

@@ -58,10 +58,18 @@ class TelegramFileAdapter:
         files: list[FileEvent] = []
         for index, component in enumerate(components):
             raw_document = document if index == 0 else None
-            file_url = getattr(component, "url", None) or None
+            component_url = getattr(component, "url", None)
+            file_url = (
+                component_url
+                if isinstance(component_url, str)
+                and component_url.startswith(("http://", "https://"))
+                else None
+            )
             file_value = getattr(component, "file_", None)
-            if not file_url and isinstance(file_value, str) and file_value.startswith(
-                ("http://", "https://")
+            if (
+                not file_url
+                and isinstance(file_value, str)
+                and file_value.startswith(("http://", "https://"))
             ):
                 file_url = file_value
 

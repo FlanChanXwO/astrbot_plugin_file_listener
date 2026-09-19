@@ -8,6 +8,7 @@ from .direct_link import DEFAULT_DIRECT_LINK_TEMPLATE, validate_direct_link_temp
 from .logger import logger
 from .models import DEFAULT_MONITOR_SOURCES, ListenerOptions
 
+# 保守默认值；部署方可根据实际 OneBot message/group_upload 到达间隔调整。
 DEFAULT_DEDUPE_WINDOW_SECONDS = 3.0
 _REPLY_MODES = {"smart", "aggregate", "separate"}
 

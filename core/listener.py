@@ -122,19 +122,24 @@ class FileListener:
         prepared: list[tuple[Hashable, CallbackBinding]] = []
         seen: set[Hashable] = set()
         for binding in bindings:
-            if not isinstance(binding, CallbackBinding):
-                raise TypeError("register() 只接受 CallbackBinding")
-            if not _is_async_callable(binding.callback):
+            callback = getattr(binding, "callback", None)
+            filter_chain = getattr(binding, "filter_chain", None)
+            if not _is_async_callable(callback):
                 raise TypeError("callback 必须是 async callable")
-            if binding.filter_chain is not None and not isinstance(
-                binding.filter_chain, FilterChain
-            ):
-                raise TypeError("filter_chain 必须是 FilterChain 或 None")
-            key = _callback_key(binding.callback)
+            if filter_chain is not None:
+                run_filter_chain = getattr(filter_chain, "run", None)
+                if not _is_async_callable(run_filter_chain):
+                    raise TypeError("filter_chain 必须提供 async run(context)")
+            key = _callback_key(callback)
             if key in seen or key in self._bindings:
                 raise ValueError("同一个 callback 不能重复注册")
             seen.add(key)
-            prepared.append((key, binding))
+            prepared.append(
+                (
+                    key,
+                    CallbackBinding(callback=callback, filter_chain=filter_chain),
+                )
+            )
 
         for key, binding in prepared:
             self._bindings[key] = binding
@@ -149,7 +154,9 @@ class FileListener:
             return
         bindings = tuple(self._bindings.values())
         if self.options.parallel:
-            await asyncio.gather(*(self._run_binding(binding, batch) for binding in bindings))
+            await asyncio.gather(
+                *(self._run_binding(binding, batch) for binding in bindings)
+            )
             return
         for binding in bindings:
             await self._run_binding(binding, batch)
@@ -166,7 +173,12 @@ class FileListener:
             filtered_batch = replace(batch, files=tuple(context.current_files))
             await binding.callback(filtered_batch, self.options)
         except Exception:
-            logger.exception("文件监听 callback binding 执行失败")
+            logger.exception(
+                "文件监听 callback binding 执行失败: callback=%r platform=%s source=%s",
+                binding.callback,
+                batch.platform,
+                batch.source_type,
+            )
 
     def _unregister(self, keys: tuple[Hashable, ...]) -> None:
         for key in keys:
