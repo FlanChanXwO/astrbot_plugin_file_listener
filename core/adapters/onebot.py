@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import re
 from collections.abc import Mapping
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 
@@ -10,6 +11,93 @@ from astrbot.api.message_components import File, Forward
 
 from ..logger import logger
 from ..models import FileEvent, FileEventBatch, ListenerOptions
+
+
+class _OneBotSelfMessageEvent:
+    """File Listener 私有的 OneBot message_sent 事件包装器。"""
+
+    def __init__(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        platform_id: str,
+        client: Any,
+    ) -> None:
+        self._payload = payload
+        self._platform_id = platform_id
+        self.bot = client
+        self.message_obj = SimpleNamespace(
+            raw_message=payload,
+            message_id=payload.get("message_id"),
+        )
+
+    def get_platform_name(self) -> str:
+        return "aiocqhttp"
+
+    def get_platform_id(self) -> str:
+        return self._platform_id
+
+    def get_messages(self) -> list[object]:
+        return []
+
+    def is_private_chat(self) -> bool:
+        return self._payload.get("message_type") == "private"
+
+    def get_group_id(self) -> str:
+        value = self._payload.get("group_id")
+        return "" if value in {None, ""} else str(value)
+
+    def get_session_id(self) -> str:
+        if not self.is_private_chat():
+            return self.get_group_id()
+        value = self._payload.get("target_id")
+        return "" if value in {None, ""} else str(value)
+
+    def get_sender_id(self) -> str:
+        value = self._payload.get("user_id") or self._payload.get("self_id")
+        return "" if value in {None, ""} else str(value)
+
+    def get_self_id(self) -> str:
+        value = self._payload.get("self_id")
+        return "" if value in {None, ""} else str(value)
+
+    async def send(self, chain: Any) -> None:
+        text = "".join(
+            str(getattr(component, "text", ""))
+            for component in getattr(chain, "chain", [])
+        )
+        if not text:
+            return
+
+        call_action = getattr(self.bot, "call_action", None)
+        if not callable(call_action):
+            logger.warning(
+                "OneBot message_sent 事件缺少 call_action，无法回复 DirectLink"
+            )
+            return
+
+        self_id = self.get_self_id()
+        routed: dict[str, object] = {"message": text}
+        if self_id:
+            routed["self_id"] = int(self_id) if self_id.isdigit() else self_id
+
+        if self.is_private_chat():
+            target_id = self.get_session_id()
+            if not target_id:
+                logger.warning("OneBot message_sent 私聊事件缺少 target_id，无法回复")
+                return
+            routed["user_id"] = int(target_id) if target_id.isdigit() else target_id
+            result = call_action("send_private_msg", **routed)
+        else:
+            group_id = self.get_group_id()
+            if not group_id:
+                logger.warning("OneBot message_sent 群聊事件缺少 group_id，无法回复")
+                return
+            routed["group_id"] = int(group_id) if group_id.isdigit() else group_id
+            result = call_action("send_group_msg", **routed)
+
+        if inspect.isawaitable(result):
+            await result
 
 
 class OneBotFileAdapter:
@@ -84,6 +172,73 @@ class OneBotFileAdapter:
             source_type=source,
             event_id=str(raw_event_id) if raw_event_id not in {None, ""} else None,
             platform_id=event.get_platform_id() or None,
+        )
+
+    async def extract_self_message_payload(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        platform_id: str,
+        client: Any,
+    ) -> FileEventBatch | None:
+        """提取 NapCat/OneBot 上报的 Bot 自身 message_sent 文件消息。"""
+        if payload.get("post_type") != "message_sent":
+            return None
+        message_type = payload.get("message_type")
+        if message_type not in {"group", "private"}:
+            return None
+        segments = payload.get("message")
+        if not isinstance(segments, list):
+            return None
+
+        event = _OneBotSelfMessageEvent(
+            payload,
+            platform_id=platform_id,
+            client=client,
+        )
+        source = "private_file" if message_type == "private" else "message"
+        files: list[FileEvent] = []
+        for segment in segments:
+            if not isinstance(segment, Mapping) or segment.get("type") != "file":
+                continue
+            data = segment.get("data", {})
+            if not isinstance(data, Mapping):
+                continue
+            file_id = data.get("file_id") or data.get("id")
+            file_url = data.get("url")
+            if not isinstance(file_url, str) or not file_url.startswith(
+                ("http://", "https://")
+            ):
+                file_url = None
+            if file_url is None and file_id:
+                file_url = await self._resolve_file_url(event, str(file_id))
+            files.append(
+                self._build_file_event(
+                    event,
+                    source,
+                    file_name=(
+                        data.get("file_name")
+                        or data.get("name")
+                        or data.get("file")
+                        or "file"
+                    ),
+                    file_url=file_url,
+                    file_id=file_id,
+                    file_size=self._first_present(data, "file_size", "size"),
+                    raw_file=segment,
+                )
+            )
+
+        if not files:
+            return None
+        event_id = payload.get("message_id")
+        return FileEventBatch(
+            files=tuple(files),
+            raw_event=event,
+            platform="aiocqhttp",
+            source_type=source,
+            event_id=str(event_id) if event_id not in {None, ""} else None,
+            platform_id=platform_id,
         )
 
     async def _extract_file_components(
